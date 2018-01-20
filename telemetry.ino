@@ -7,7 +7,7 @@
 // e.g. Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
 
 const String OS_NAME = "THUNDERBOLT";
-const String OS_VERSION = "V1.2.0";
+const String OS_VERSION = "V1.3.0";
 
 #define LCD_CS A3 // Chip Select goes to Analog 3
 #define LCD_CD A2 // Command/Data goes to Analog 2
@@ -21,6 +21,15 @@ const String OS_VERSION = "V1.2.0";
 MCUFRIEND_kbv tft;
 //#include <Adafruit_TFTLCD.h>
 //Adafruit_TFTLCD tft(LCD_CS, LCD_CD, LCD_WR, LCD_RD, LCD_RESET);
+
+
+/* Torque Calculation Definitions */
+#include <Hx711.h>
+#define k (-0.08*9.81)
+#define conv (36.70047)// conversion factor
+Hx711 scale(A12, A15);
+float torque = 0;
+
 
 // Assign human-readable names to some common 16-bit color values:
 #define	BLACK   0x0000
@@ -58,17 +67,19 @@ void runtests(void);
 uint16_t g_identifier;
 
 // WEIGHT SENSOR DATA
-const int gnd1 = 13, gnd2 = 10, vcc1 = 14, vcc2 = 11;
-const int sck = 15, dout = 12;
+const int gnd1 = A10, gnd2 = A13, vcc1 = A11, vcc2 = A14;
+const int sck = A15, dout = A12;
+float weight = 0;
+
 
 // IR SENSOR DATA
-const int irGND = A13, irVCC = A14, irSIG = A15;
+const int irGND = A7, irVCC = A8, irSIG = A9;
 bool hasRotated = false;
 float rotations = 0.0;
 float timeElapsed = millis();
 float rpm = 0.0;
 #include <Hx711.h>
-Hx711 scale(A12, A15);
+//Hx711 scale(A12, A15);
 
 
 bool startSystem = false;
@@ -78,13 +89,19 @@ void setup(void) {
   digitalWrite(gnd2, LOW);
   digitalWrite(vcc1, HIGH);
   digitalWrite(vcc2, HIGH);
+  pinMode(gnd1,OUTPUT);
+  pinMode(gnd2,OUTPUT);
+  pinMode(vcc1,OUTPUT);
+  pinMode(vcc2,OUTPUT);
 
+  
   pinMode(irSIG, INPUT);
   pinMode(irGND, OUTPUT);
   pinMode(irVCC, OUTPUT);
   pinMode(LED_BUILTIN,OUTPUT);
   digitalWrite(irGND, LOW);
   digitalWrite(irVCC, HIGH);
+
   
     Serial.begin(9600);
     uint32_t when = millis();
@@ -112,43 +129,47 @@ void printmsg(int row, const char *msg)
 }
 
 void loop(void) {
-  Serial.println(analogRead(A15));
-  irSense(); 
+  //Serial.println(analogRead(A15));
+  //irSense(); 
+  getTorqueWeight();
+  getRPM();
+  printResults();
+  
 }
 
 int lineIteration = 0;
 float total = 0.0;
 float t = 0.0;
 
-void senseWeight(void){
-  if(startSystem){
-    if(lineIteration == 20){
-      tft.setTextColor(GREEN); 
-      tft.setTextSize(2);
-      tft.fillScreen(BLACK);
-      tft.setCursor(0,0); 
-      lineIteration = 0;
-    }
-    
-    /*Serial.print(scale.getGram(), 1);
-    Serial.println(" g");
-    tft.println("Weight: " + String(scale.getGram()) + " g");*/
-    
-    lineIteration++;
-    delay(200);
-  }
+void printResults(){
+  tft.fillScreen(BLACK); 
+  //lineIteration = 0;
+  tft.setTextColor(GREEN); 
+  tft.setTextSize(3);
+  tft.setCursor(0,000); 
+  tft.println("Torque: " + String(torque) + " N.m");
+  tft.setCursor(0,50);
+  tft.println("Weight: " + String(weight) + " grams");
+  tft.setCursor(0,100); 
+  tft.println("RPM: " + String(total) + " rpm");
+  //Serial.println(torque + " N.m");
+  Serial.println("Weight " + String(weight) + " grams");
+  lineIteration++;
+  delay(500);
 }
 
 
-void irSense(void){
+void getTorqueWeight(void){
+    weight = scale.getGram() + 7079;
+    weight = abs(weight);
+    torque = conv*((weight)/2000)*k;
+    torque = abs(torque);
+}
+
+
+void getRPM(void){
   if(startSystem){
-    if(lineIteration == 20){
-      tft.setTextColor(GREEN); 
-      tft.setTextSize(2);
-      tft.fillScreen(BLACK);
-      tft.setCursor(0,0); 
-      lineIteration = 0;
-    }
+    
     
     //tft.println(analogRead(irSIG));    
     if(analogRead(irSIG)<100 && !hasRotated){
@@ -162,13 +183,13 @@ void irSense(void){
     lineIteration++;
     timeElapsed = millis();    
     rpm = rotations/(timeElapsed/1000)/60;
-    tft.println(rotations);
+    //tft.println(rotations);
 
-    Serial.println(rotations);
+    //Serial.println(rotations);
     t = timeElapsed/60000;
-    Serial.println(t);
+    //Serial.println(t);
     total = rotations/t;
-    Serial.println(total);
+    //Serial.println(total);
     
     
   }
